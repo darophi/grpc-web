@@ -839,6 +839,78 @@ void PrintProtoDtsEnum(Printer *printer, const EnumDescriptor *desc)
   printer->Print("}\n");
 }
 
+void PrintProtoDtsEnumSwitchFunction(Printer *printer, const EnumDescriptor *desc)
+{
+  std::map<string, string> vars;
+  vars["enum_name"] = desc->name();
+  vars["enum_parameter"] = "value";
+
+  printer->Print(vars, "export function $enum_name$ToString($enum_parameter$: $enum_name$): string;\n");
+}
+
+void PrintProtoJsEnumSwitchFunction(Printer *printer, const EnumDescriptor *desc)
+{
+  std::map<string, string> vars;
+  vars["enum_name"] = desc->name();
+  vars["enum_parameter"] = "value";
+
+  printer->Print(vars, "export function $enum_name$ToString($enum_parameter$) { \n");
+  printer->Indent();
+  printer->Print(vars, "switch($enum_parameter$) {\n");
+  printer->Indent();
+  for (int i = 0; i < desc->value_count(); i++)
+  {
+    vars["value_name"] = Uppercase(desc->value(i)->name());
+    vars["value_number"] = desc->value(i)->name();
+    printer->Print(vars, "case $enum_name$.$value_name$: return \"$value_number$\"; \n");
+  }
+  printer->Outdent();
+  printer->Print(vars, "}\n");
+  printer->Outdent();
+  printer->Print("}\n");
+}
+
+void PrintProtoTsValuesEnum(Printer *printer, const EnumDescriptor *desc)
+{
+  std::map<string, string> vars;
+  vars["enum_name"] = desc->name();
+  vars["enum_parameter"] = "value";
+
+  printer->Print(vars, "export enum $enum_name$Values { \n");
+  printer->Indent();
+  for (int i = 0; i < desc->value_count(); i++)
+  {
+    vars["value_name"] = Uppercase(desc->value(i)->name());
+    vars["value_number"] = UppercaseFirstLetter(Lowercase(desc->value(i)->name()));
+    printer->Print(vars, "$value_name$ = \"$value_number$\", \n");
+  }
+  printer->Outdent();
+  printer->Print("}\n");
+}
+
+void PrintProtoTsEnumSwitchFunction(Printer *printer, const EnumDescriptor *desc)
+{
+  std::map<string, string> vars;
+  vars["enum_name"] = desc->name();
+  vars["enum_parameter"] = "value";
+
+  printer->Print(vars, "export function $enum_name$ToString($enum_parameter$: $enum_name$): string { \n");
+  printer->Indent();
+  printer->Print(vars, "switch($enum_parameter$) {\n");
+  printer->Indent();
+  for (int i = 0; i < desc->value_count(); i++)
+  {
+    vars["value_name"] = Uppercase(desc->value(i)->name());
+    vars["value_number"] = desc->value(i)->name();
+    printer->Print(vars, "case $enum_name$.$value_name$: return $enum_name$Values.$value_name$; \n");
+  }
+  printer->Outdent();
+  printer->Print(vars, "}\n");
+  printer->Outdent();
+  printer->Print("}\n");
+}
+
+
 void PrintProtoDtsOneofCase(Printer *printer, const OneofDescriptor *desc)
 {
   std::map<string, string> vars;
@@ -975,6 +1047,7 @@ void PrintProtoDtsMessage(Printer *printer, const Descriptor *desc,
   for (int i = 0; i < desc->enum_type_count(); i++) {
     printer->Print("\n");
     PrintProtoDtsEnum(printer, desc->enum_type(i));
+    PrintProtoDtsEnumSwitchFunction(printer, file->enum_type(i));
   }
 
   for (int i = 0; i < desc->oneof_decl_count(); i++) {
@@ -984,6 +1057,48 @@ void PrintProtoDtsMessage(Printer *printer, const Descriptor *desc,
 
   printer->Outdent();
   printer->Print("}\n\n");
+}
+
+void PrintEnumConvertsFile(Printer *printer, const FileDescriptor *file)
+{
+
+  for (int i = 0; i < file->enum_type_count(); i++) {
+    const string& name = file->enum_type(i)->name();
+    // We need to give each cross-file import an alias.
+    printer->Print("import $enum$ from './$enumlower$.js'\n\n", "enum", name, "enumlower", Lowercase(name));
+    PrintProtoJsEnumSwitchFunction(printer, file->enum_type(i));
+    // printer->Print(
+    //     "import * as $alias$ from '$dep_filename$_pb';\n",
+    //     "alias", ModuleAlias(name),
+    //     "dep_filename", GetRootPath(file->name(), name) + StripProto(name));
+  }
+  printer->Print("\n\n");
+
+  // for (int i = 0; i < file->message_type_count(); i++) {
+  //   PrintProtoDtsMessage(printer, file->message_type(i), file);
+  // }
+
+  // for (int i = 0; i < file->enum_type_count(); i++) {
+  //   PrintProtoDtsEnum(printer, file->enum_type(i));
+  //   PrintProtoDtsEnumSwitchFunction(printer, file->enum_type(i));
+  // }
+}
+
+void PrintEnumConvertsTsFile(Printer *printer, const FileDescriptor *file)
+{
+  for (int i = 0; i < file->enum_type_count(); i++) {
+    const string& name = file->enum_type(i)->name();
+    const string& filename = StripProto(file->enum_type(i)->file()->name()) + "_pb";
+    printer->Print("import { $enum$ } from './$enumlower$'\n", "enum", name, "enumlower", Lowercase(filename));
+  }
+  printer->Print("\n");
+  for (int i = 0; i < file->enum_type_count(); i++) {
+    // We need to give each cross-file import an alias.
+    PrintProtoTsEnumSwitchFunction(printer, file->enum_type(i));
+    PrintProtoTsValuesEnum(printer, file->enum_type(i));
+    printer->Print("\n");
+  }
+  printer->Print("\n");
 }
 
 void PrintProtoDtsFile(Printer *printer, const FileDescriptor *file)
@@ -1006,6 +1121,7 @@ void PrintProtoDtsFile(Printer *printer, const FileDescriptor *file)
 
   for (int i = 0; i < file->enum_type_count(); i++) {
     PrintProtoDtsEnum(printer, file->enum_type(i));
+    PrintProtoDtsEnumSwitchFunction(printer, file->enum_type(i));
   }
 }
 
@@ -1439,7 +1555,7 @@ void PrintMultipleFilesMode(const FileDescriptor* file, string file_name,
       vars["method_descriptor"] =
           method_descriptors[service->name() + "." + method->name()];
       vars["in_type"] = "proto." + input_type->full_name();
-      vars["out_type"] = "proto." + output_type->full_name();
+      vars["out_type"] = "proto." + output_type->full_name() + "123";
 
       // Client streaming is not supported yet
       if (!method->client_streaming()) {
@@ -1666,11 +1782,16 @@ class GrpcCodeGenerator : public CodeGenerator {
       PrintProtoDtsFile(&proto_dts_printer, file);
     }
 
+    string enum_converts_dts_file_name = StripProto(file->name()) + "enumconverters.ts";
+    std::unique_ptr<ZeroCopyOutputStream> enumdts_converts_output(
+        context->Open(enum_converts_dts_file_name));
+    Printer enumdts_converts_printer(enumdts_converts_output.get(), '$');
+    PrintEnumConvertsTsFile(&enumdts_converts_printer, file);
+
     if (!file->service_count()) {
       // No services, nothing to do.
       return true;
     }
-
     string file_name = generator_options.OutputFile(file->name());
     if (generator_options.multiple_files() &&
         ImportStyle::CLOSURE == generator_options.import_style()) {
@@ -1812,6 +1933,9 @@ class GrpcCodeGenerator : public CodeGenerator {
       Printer grpcweb_dts_printer(grpcweb_dts_output.get(), '$');
 
       PrintGrpcWebDtsFile(&grpcweb_dts_printer, file);
+
+
+
     }
 
     if (generator_options.generate_closure_es6()) {

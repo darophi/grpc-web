@@ -7,3 +7,5 @@ bazel-testlogs
 *.o
 protoc-gen-*
 .DS_Store
+
+playground/out/

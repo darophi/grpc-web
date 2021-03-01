@@ -16,6 +16,9 @@ CXX ?= g++
 CPPFLAGS += -I/usr/local/include -pthread
 CXXFLAGS += -std=c++11
 LDFLAGS += -L/usr/local/lib -lprotoc -lprotobuf -lpthread -ldl
+DIR += examples
+FILE += ./examples/echo.proto
+OUTDIR += ./out
 
 all: protoc-gen-grpc-web
 
@@ -27,3 +30,8 @@ install: protoc-gen-grpc-web
 
 clean:
 	rm -f *.o protoc-gen-grpc-web
+
+example: protoc-gen-grpc-web
+	protoc -I=$(DIR) $(FILE) \
+  --js_out=import_style=commonjs+dts,binary:$(OUTDIR) \
+  --grpc-web_out=import_style=typescript,mode=grpcwebtext:$(OUTDIR) --plugin=protoc-gen-grpc-web
